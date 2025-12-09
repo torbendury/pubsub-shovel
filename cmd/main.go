@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
-	_ "github.com/torbendury/pubsub-shovel/internal/shovel"
+	_ "github.com/torbendury/pubsub-shovel"
 )
 
 func main() {

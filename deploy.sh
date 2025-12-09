@@ -16,15 +16,16 @@ echo "Deploying function '$FUNCTION_NAME' to project '$PROJECT_ID'..."
 gcloud functions deploy $FUNCTION_NAME \
     --runtime go124 \
     --trigger-http \
-    --entry-point ShovelMessages \
+    --entry-point Handler \
     --allow-unauthenticated \
     --project $PROJECT_ID \
     --memory 256MB \
     --timeout 540s \
     --max-instances 10 \
     --region europe-west1 \
-    --gen2
+    --gen2 \
+    --source .
 
 echo "Deployment completed!"
 echo "Function URL:"
-gcloud functions describe $FUNCTION_NAME --project $PROJECT_ID --format="value(httpsTrigger.url)"
+gcloud functions describe $FUNCTION_NAME --project $PROJECT_ID --format="value(httpsTrigger.url)" --region europe-west1
