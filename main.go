@@ -144,7 +144,7 @@ func processMessages(ctx context.Context, req *ShovelRequest, requestID string) 
 
 	// Set receive settings for better performance
 	sourceSub.ReceiveSettings.Synchronous = false
-	sourceSub.ReceiveSettings.MaxConcurrentHandlers = 10
+	sourceSub.ReceiveSettings.NumGoroutines = 10
 	sourceSub.ReceiveSettings.MaxOutstandingMessages = 100
 
 	// Context with timeout for receiving messages
