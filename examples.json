@@ -1,0 +1,51 @@
+{
+  "examples": {
+    "transfer_specific_number": {
+      "description": "Transfer 50 messages from source to target",
+      "request": {
+        "numMessages": 50,
+        "sourceSubscription": "projects/my-project/subscriptions/source-subscription",
+        "targetTopic": "projects/my-project/topics/target-topic"
+      }
+    },
+    "transfer_all_messages": {
+      "description": "Transfer all available messages",
+      "request": {
+        "allMessages": true,
+        "sourceSubscription": "projects/my-project/subscriptions/source-subscription",
+        "targetTopic": "projects/my-project/topics/target-topic"
+      }
+    },
+    "cross_project_transfer": {
+      "description": "Transfer messages between different projects",
+      "request": {
+        "numMessages": 100,
+        "sourceSubscription": "projects/source-project/subscriptions/my-subscription",
+        "targetTopic": "projects/target-project/topics/my-topic"
+      }
+    }
+  },
+  "curl_examples": [
+    {
+      "name": "Transfer 10 messages locally",
+      "command": "curl -X POST http://localhost:8080 -H \"Content-Type: application/json\" -d '{\"numMessages\": 10, \"sourceSubscription\": \"projects/test-project/subscriptions/test-sub\", \"targetTopic\": \"projects/test-project/topics/test-topic\"}'"
+    },
+    {
+      "name": "Transfer all messages to production",
+      "command": "curl -X POST https://YOUR_FUNCTION_URL -H \"Content-Type: application/json\" -d '{\"allMessages\": true, \"sourceSubscription\": \"projects/prod-project/subscriptions/prod-sub\", \"targetTopic\": \"projects/prod-project/topics/prod-topic\"}'"
+    }
+  ],
+  "testing": {
+    "local_development": {
+      "note": "For local testing, ensure you have Google Cloud credentials configured",
+      "setup_commands": [
+        "gcloud auth application-default login",
+        "export GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/credentials.json"
+      ]
+    },
+    "unit_tests": {
+      "run_tests": "go test -v ./...",
+      "run_with_coverage": "go test -v -coverprofile=coverage.out ./... && go tool cover -html=coverage.out"
+    }
+  }
+}

@@ -1,0 +1,72 @@
+.PHONY: build test run clean deploy docker-build docker-run
+
+# Default target
+all: test build
+
+# Build the application
+build:
+	go build -o bin/pubsub-shovel .
+
+# Run tests
+test:
+	go test -v ./...
+
+# Run tests with coverage
+test-coverage:
+	go test -v -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+
+# Run the application locally
+run:
+	go run main.go
+
+# Clean build artifacts
+clean:
+	rm -f bin/pubsub-shovel coverage.out coverage.html
+	rm -rf bin/
+
+# Format code
+fmt:
+	go fmt ./...
+
+# Lint code
+lint:
+	golangci-lint run
+
+# Download dependencies
+deps:
+	go mod download
+	go mod tidy
+
+# Deploy to Google Cloud Functions
+deploy:
+	./deploy.sh
+
+# Build Docker image
+docker-build:
+	docker build -t pubsub-shovel:latest .
+
+# Run Docker container locally
+docker-run:
+	docker run -p 8080:8080 -e GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/credentials.json pubsub-shovel:latest
+
+# Development setup
+dev-setup: deps
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Help target
+help:
+	@echo "Available targets:"
+	@echo "  build          - Build the application"
+	@echo "  test           - Run tests"
+	@echo "  test-coverage  - Run tests with coverage report"
+	@echo "  run            - Run the application locally"
+	@echo "  clean          - Clean build artifacts"
+	@echo "  fmt            - Format code"
+	@echo "  lint           - Lint code"
+	@echo "  deps           - Download and tidy dependencies"
+	@echo "  deploy         - Deploy to Google Cloud Functions"
+	@echo "  docker-build   - Build Docker image"
+	@echo "  docker-run     - Run Docker container locally"
+	@echo "  dev-setup      - Set up development environment"
+	@echo "  help           - Show this help message"
