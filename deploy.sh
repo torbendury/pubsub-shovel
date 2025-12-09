@@ -21,7 +21,9 @@ gcloud functions deploy $FUNCTION_NAME \
     --project $PROJECT_ID \
     --memory 256MB \
     --timeout 540s \
-    --max-instances 10
+    --max-instances 10 \
+    --region europe-west1 \
+    --gen2
 
 echo "Deployment completed!"
 echo "Function URL:"
