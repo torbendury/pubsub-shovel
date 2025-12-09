@@ -154,8 +154,9 @@ func processShovelRequest(ctx context.Context, req *ShovelRequest) (int, error) 
 		maxMessages = 10000 // Reasonable upper limit
 	}
 
-	// Process messages
-	var processedCount int
+	// Process messages with proper concurrency control
+	var acceptedCount int  // Messages accepted for processing
+	var processedCount int // Messages successfully processed
 	var mutex sync.Mutex
 	done := make(chan bool)
 
@@ -165,15 +166,19 @@ func processShovelRequest(ctx context.Context, req *ShovelRequest) (int, error) 
 	go func() {
 		err = sourceSub.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
 			mutex.Lock()
-			current := processedCount
-			mutex.Unlock()
-
-			// Check if we've reached our limit
-			if current >= maxMessages {
+			// Check if we've already accepted enough messages
+			if acceptedCount >= maxMessages {
+				mutex.Unlock()
 				msg.Nack()
 				cancel()
 				return
 			}
+			// Increment accepted count immediately to prevent race condition
+			acceptedCount++
+			// currentAccepted := acceptedCount
+			mutex.Unlock()
+
+			//log.Printf("Accepted message %d/%d for processing", currentAccepted, maxMessages)
 
 			// Publish to target topic
 			result := targetTopic.Publish(ctx, &pubsub.Message{
@@ -185,15 +190,17 @@ func processShovelRequest(ctx context.Context, req *ShovelRequest) (int, error) 
 			go func() {
 				_, publishErr := result.Get(ctx)
 				if publishErr != nil {
-					log.Printf("Failed to publish message: %v", publishErr)
+					//log.Printf("Failed to publish message: %v", publishErr)
 					msg.Nack()
+					// Don't decrement acceptedCount since we want to stop at the limit
 				} else {
 					// Acknowledge original message
 					msg.Ack()
 					mutex.Lock()
 					processedCount++
-					log.Printf("Processed message %d/%d", processedCount, maxMessages)
+					//currentProcessed := processedCount
 					mutex.Unlock()
+					//log.Printf("Successfully processed message %d/%d (accepted: %d)", currentProcessed, maxMessages, currentAccepted)
 				}
 			}()
 		})
@@ -221,7 +228,13 @@ func processShovelRequest(ctx context.Context, req *ShovelRequest) (int, error) 
 	// Wait a bit for any pending operations to complete
 	time.Sleep(2 * time.Second)
 
-	return processedCount, nil
+	mutex.Lock()
+	finalAccepted := acceptedCount
+	finalProcessed := processedCount
+	mutex.Unlock()
+
+	log.Printf("Shovel completed: accepted %d messages, successfully processed %d messages", finalAccepted, finalProcessed)
+	return finalProcessed, nil
 }
 
 // extractProjectID extracts project ID from a resource name
