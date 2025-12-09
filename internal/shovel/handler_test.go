@@ -1,4 +1,4 @@
-package main
+package shovel
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestShovelMessages_ValidationErrors(t *testing.T) {
+func TestHandler_ValidationErrors(t *testing.T) {
 	tests := []struct {
 		name         string
 		payload      ShovelRequest
@@ -76,7 +76,7 @@ func TestShovelMessages_ValidationErrors(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
-			ShovelMessages(rr, req)
+			Handler(rr, req)
 
 			if rr.Code != tt.expectedCode {
 				t.Errorf("Expected status code %d, got %d", tt.expectedCode, rr.Code)
@@ -85,22 +85,22 @@ func TestShovelMessages_ValidationErrors(t *testing.T) {
 	}
 }
 
-func TestShovelMessages_MethodNotAllowed(t *testing.T) {
+func TestHandler_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 
-	ShovelMessages(rr, req)
+	Handler(rr, req)
 
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Expected status code %d, got %d", http.StatusMethodNotAllowed, rr.Code)
 	}
 }
 
-func TestShovelMessages_OptionsRequest(t *testing.T) {
+func TestHandler_OptionsRequest(t *testing.T) {
 	req := httptest.NewRequest("OPTIONS", "/", nil)
 	rr := httptest.NewRecorder()
 
-	ShovelMessages(rr, req)
+	Handler(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Errorf("Expected status code %d, got %d", http.StatusNoContent, rr.Code)

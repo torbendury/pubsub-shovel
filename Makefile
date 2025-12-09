@@ -3,9 +3,9 @@
 # Default target
 all: test build
 
-# Build the application
+# Build the Cloud Function
 build:
-	go build -o bin/pubsub-shovel .
+	go build -o bin/pubsub-shovel ./cmd
 
 # Run tests
 test:
@@ -16,13 +16,13 @@ test-coverage:
 	go test -v -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 
-# Run the application locally
+# Run the local server
 run:
-	go run main.go
+	go run ./cmd
 
 # Clean build artifacts
 clean:
-	rm -f bin/pubsub-shovel coverage.out coverage.html
+	rm -f bin/* coverage.out coverage.html
 	rm -rf bin/
 
 # Format code
@@ -57,10 +57,13 @@ dev-setup: deps
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  build          - Build the application"
+	@echo "  build          - Build the Cloud Function"
+	@echo "  build-local    - Build the local server"
+	@echo "  build-all      - Build both variants"
 	@echo "  test           - Run tests"
 	@echo "  test-coverage  - Run tests with coverage report"
-	@echo "  run            - Run the application locally"
+	@echo "  run            - Run the local server directly"
+	@echo "  run-local      - Build and run local server binary"
 	@echo "  clean          - Clean build artifacts"
 	@echo "  fmt            - Format code"
 	@echo "  lint           - Lint code"

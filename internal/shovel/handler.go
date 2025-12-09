@@ -1,4 +1,4 @@
-package main
+package shovel
 
 import (
 	"context"
@@ -13,6 +13,10 @@ import (
 	"cloud.google.com/go/pubsub"
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 )
+
+func init() {
+	functions.HTTP("Handler", Handler)
+}
 
 // ShovelRequest represents the HTTP request payload
 type ShovelRequest struct {
@@ -30,12 +34,8 @@ type ShovelResponse struct {
 	RequestID      string `json:"requestId,omitempty"`
 }
 
-func init() {
-	functions.HTTP("ShovelMessages", ShovelMessages)
-}
-
-// ShovelMessages is the HTTP Cloud Function entry point
-func ShovelMessages(w http.ResponseWriter, r *http.Request) {
+// Handler handles the shovel HTTP requests
+func Handler(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -48,36 +48,37 @@ func ShovelMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only allow POST requests
 	if r.Method != "POST" {
-		http.Error(w, "Only POST method allowed", http.StatusMethodNotAllowed)
+		respondWithError(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Parse request body
 	var req ShovelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Error decoding request: %v", err)
-		respondWithError(w, "Invalid JSON payload", http.StatusBadRequest)
+		respondWithError(w, fmt.Sprintf("Invalid JSON payload: %v", err), http.StatusBadRequest)
 		return
 	}
 
 	// Validate request
 	if err := validateRequest(&req); err != nil {
-		log.Printf("Validation error: %v", err)
 		respondWithError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Generate request ID for tracking
-	requestID := fmt.Sprintf("shovel-%d", time.Now().UnixNano())
+	requestID := fmt.Sprintf("shovel-%d", time.Now().UnixNano()/1000000)
+	log.Printf("Processing shovel request %s: %+v", requestID, req)
 
-	// Start asynchronous processing
+	// Start async processing
 	go func() {
 		ctx := context.Background()
-		count, err := processMessages(ctx, &req, requestID)
+		processedCount, err := processShovelRequest(ctx, &req)
 		if err != nil {
 			log.Printf("Request %s failed: %v", requestID, err)
 		} else {
-			log.Printf("Request %s completed successfully, processed %d messages", requestID, count)
+			log.Printf("Request %s completed successfully, processed %d messages", requestID, processedCount)
 		}
 	}()
 
@@ -103,16 +104,16 @@ func validateRequest(req *ShovelRequest) error {
 		return fmt.Errorf("targetTopic is required")
 	}
 	if !req.AllMessages && req.NumMessages <= 0 {
-		return fmt.Errorf("numMessages must be positive when allMessages is false")
+		return fmt.Errorf("numMessages must be greater than 0 when allMessages is false")
 	}
 	if req.AllMessages && req.NumMessages > 0 {
-		return fmt.Errorf("cannot specify both allMessages=true and numMessages")
+		return fmt.Errorf("cannot specify both allMessages=true and numMessages > 0")
 	}
 	return nil
 }
 
-// processMessages handles the actual message processing
-func processMessages(ctx context.Context, req *ShovelRequest, requestID string) (int, error) {
+// processShovelRequest handles the actual message shoveling
+func processShovelRequest(ctx context.Context, req *ShovelRequest) (int, error) {
 	// Create PubSub client
 	client, err := pubsub.NewClient(ctx, extractProjectID(req.SourceSubscription))
 	if err != nil {
@@ -135,118 +136,112 @@ func processMessages(ctx context.Context, req *ShovelRequest, requestID string) 
 	// Check if target topic exists
 	exists, err := targetTopic.Exists(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to check target topic existence: %v", err)
+		return 0, fmt.Errorf("failed to check if target topic exists: %v", err)
 	}
 	if !exists {
 		return 0, fmt.Errorf("target topic %s does not exist", req.TargetTopic)
 	}
-
-	log.Printf("Request %s: Starting to process messages from %s to %s",
-		requestID, req.SourceSubscription, req.TargetTopic)
-
-	var processedCount int
-	var mu sync.Mutex
-	var wg sync.WaitGroup
 
 	// Set receive settings for better performance
 	sourceSub.ReceiveSettings.Synchronous = false
 	sourceSub.ReceiveSettings.NumGoroutines = 10
 	sourceSub.ReceiveSettings.MaxOutstandingMessages = 100
 
-	// Context with timeout for receiving messages
-	receiveCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	// Determine number of messages to process
+	maxMessages := req.NumMessages
+	if req.AllMessages {
+		// For "all messages", we'll set a high limit and process until no more messages
+		maxMessages = 10000 // Reasonable upper limit
+	}
+
+	// Process messages
+	var processedCount int
+	var mutex sync.Mutex
+	done := make(chan bool)
+
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Channel to control when to stop receiving
-	done := make(chan bool, 1)
+	go func() {
+		err = sourceSub.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
+			mutex.Lock()
+			current := processedCount
+			mutex.Unlock()
 
-	err = sourceSub.Receive(receiveCtx, func(ctx context.Context, msg *pubsub.Message) {
-		defer msg.Ack()
-
-		// Check if we should stop processing
-		select {
-		case <-done:
-			return
-		default:
-		}
-
-		wg.Add(1)
-		go func(message *pubsub.Message) {
-			defer wg.Done()
-
-			// Republish message to target topic
-			result := targetTopic.Publish(ctx, &pubsub.Message{
-				Data:       message.Data,
-				Attributes: message.Attributes,
-			})
-
-			// Wait for publish to complete
-			if _, err := result.Get(ctx); err != nil {
-				log.Printf("Request %s: Failed to publish message: %v", requestID, err)
+			// Check if we've reached our limit
+			if current >= maxMessages {
+				msg.Nack()
+				cancel()
 				return
 			}
 
-			mu.Lock()
-			processedCount++
-			current := processedCount
-			mu.Unlock()
+			// Publish to target topic
+			result := targetTopic.Publish(ctx, &pubsub.Message{
+				Data:       msg.Data,
+				Attributes: msg.Attributes,
+			})
 
-			log.Printf("Request %s: Processed message %d", requestID, current)
-
-			// Check if we've reached the target number
-			if !req.AllMessages && current >= req.NumMessages {
-				select {
-				case done <- true:
-				default:
+			// Wait for publish result
+			go func() {
+				_, publishErr := result.Get(ctx)
+				if publishErr != nil {
+					log.Printf("Failed to publish message: %v", publishErr)
+					msg.Nack()
+				} else {
+					// Acknowledge original message
+					msg.Ack()
+					mutex.Lock()
+					processedCount++
+					log.Printf("Processed message %d/%d", processedCount, maxMessages)
+					mutex.Unlock()
 				}
-			}
-		}(msg)
+			}()
+		})
 
-		// If we're not processing all messages and we've reached our target, stop
-		if !req.AllMessages {
-			mu.Lock()
-			current := processedCount
-			mu.Unlock()
-			if current >= req.NumMessages {
-				select {
-				case done <- true:
-				default:
-				}
-			}
+		if err != nil {
+			log.Printf("Receive error: %v", err)
 		}
-	})
+		done <- true
+	}()
 
-	// Wait for all publishing to complete
-	wg.Wait()
-
-	if err != nil && err != context.Canceled {
-		return processedCount, fmt.Errorf("error during message processing: %v", err)
+	// Set timeout for processing
+	timeout := 5 * time.Minute
+	if req.AllMessages {
+		timeout = 10 * time.Minute // Longer timeout for "all messages"
 	}
 
-	log.Printf("Request %s: Completed processing %d messages", requestID, processedCount)
+	select {
+	case <-done:
+		log.Printf("Message processing completed")
+	case <-time.After(timeout):
+		log.Printf("Processing timeout reached")
+		cancel()
+	}
+
+	// Wait a bit for any pending operations to complete
+	time.Sleep(2 * time.Second)
+
 	return processedCount, nil
 }
 
-// extractProjectID extracts the project ID from a fully qualified resource name
-func extractProjectID(fqdn string) string {
-	// Expected format: projects/PROJECT_ID/subscriptions/SUBSCRIPTION_NAME
-	// or projects/PROJECT_ID/topics/TOPIC_NAME
-	parts := splitResourceName(fqdn)
-	if len(parts) >= 2 && parts[0] == "projects" {
-		return parts[1]
+// extractProjectID extracts project ID from a resource name
+func extractProjectID(resourceName string) string {
+	parts := splitResourceName(resourceName)
+	for i, part := range parts {
+		if part == "projects" && i+1 < len(parts) {
+			return parts[i+1]
+		}
 	}
 	return ""
 }
 
-// extractResourceName extracts the resource name from a fully qualified resource name
+// extractResourceName extracts the resource name from FQDN
 func extractResourceName(fqdn string) string {
-	// Expected format: projects/PROJECT_ID/subscriptions/SUBSCRIPTION_NAME
-	// or projects/PROJECT_ID/topics/TOPIC_NAME
 	parts := splitResourceName(fqdn)
-	if len(parts) >= 4 {
-		return parts[3]
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
 	}
-	return fqdn // fallback to original if parsing fails
+	return ""
 }
 
 // splitResourceName splits a resource name by '/'
@@ -281,27 +276,7 @@ func respondWithError(w http.ResponseWriter, message string, statusCode int) {
 	}
 }
 
-// main is required for local testing but not used in Cloud Functions
-func main() {
-	// Register the function handler for local testing
-	http.HandleFunc("/", ShovelMessages)
-	http.HandleFunc("/ShovelMessages", ShovelMessages)
-
-	// Start the server
-	port := "8080"
-	if p := getEnvVar("PORT"); p != "" {
-		port = p
-	}
-
-	log.Printf("Starting server on port %s", port)
-	log.Printf("Function available at:")
-	log.Printf("  http://localhost:%s/", port)
-	log.Printf("  http://localhost:%s/ShovelMessages", port)
-
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
-} // getEnvVar is a helper to get environment variables with fallback
-func getEnvVar(key string) string {
+// GetEnvVar is a helper to get environment variables with fallback
+func GetEnvVar(key string) string {
 	return os.Getenv(key)
 }

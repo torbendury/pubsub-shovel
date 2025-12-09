@@ -29,7 +29,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Default function URL (update this with your deployed function URL)
-DEFAULT_FUNCTION_URL="http://localhost:8080"  # For local testing
+DEFAULT_FUNCTION_URL="http://localhost:8080/Handler"  # For local testing
 FUNCTION_URL=${1:-$DEFAULT_FUNCTION_URL}
 
 # Keep the URL as provided (both root and /ShovelMessages paths work locally now)
