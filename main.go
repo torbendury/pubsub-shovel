@@ -275,19 +275,25 @@ func respondWithError(w http.ResponseWriter, message string, statusCode int) {
 
 // main is required for local testing but not used in Cloud Functions
 func main() {
-	// Start the functions framework
+	// Register the function handler for local testing
+	http.HandleFunc("/", ShovelMessages)
+	http.HandleFunc("/ShovelMessages", ShovelMessages)
+
+	// Start the server
 	port := "8080"
 	if p := getEnvVar("PORT"); p != "" {
 		port = p
 	}
 
 	log.Printf("Starting server on port %s", port)
+	log.Printf("Function available at:")
+	log.Printf("  http://localhost:%s/", port)
+	log.Printf("  http://localhost:%s/ShovelMessages", port)
+
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
-}
-
-// getEnvVar is a helper to get environment variables with fallback
+} // getEnvVar is a helper to get environment variables with fallback
 func getEnvVar(key string) string {
 	return os.Getenv(key)
 }
