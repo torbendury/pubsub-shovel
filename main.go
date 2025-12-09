@@ -89,7 +89,9 @@ func ShovelMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed to encode response: %v", err)
+	}
 }
 
 // validateRequest validates the incoming request
@@ -116,7 +118,11 @@ func processMessages(ctx context.Context, req *ShovelRequest, requestID string) 
 	if err != nil {
 		return 0, fmt.Errorf("failed to create pubsub client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("Failed to close pubsub client: %v", err)
+		}
+	}()
 
 	// Get source subscription
 	sourceSubName := extractResourceName(req.SourceSubscription)
@@ -270,7 +276,9 @@ func respondWithError(w http.ResponseWriter, message string, statusCode int) {
 		Message: message,
 	}
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed to encode error response: %v", err)
+	}
 }
 
 // main is required for local testing but not used in Cloud Functions
