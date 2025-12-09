@@ -129,7 +129,7 @@ curl -X POST http://localhost:8080 \
 
 ```bash
 gcloud functions deploy pubsub-shovel \
-  --runtime go121 \
+  --runtime go124 \
   --trigger-http \
   --entry-point ShovelMessages \
   --allow-unauthenticated
