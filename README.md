@@ -14,6 +14,7 @@ A Google Cloud Function that acts as a "shovel" to transfer PubSub messages from
 ## API
 
 ### Endpoint
+
 `POST /ShovelMessages` (or your function trigger URL)
 
 ### Request Payload
@@ -103,16 +104,19 @@ console.log('Request ID:', result.requestId);
 ### Local Development
 
 1. Install dependencies:
+
 ```bash
 go mod download
 ```
 
 2. Run locally:
+
 ```bash
 go run main.go
 ```
 
 3. Test with curl:
+
 ```bash
 curl -X POST http://localhost:8080 \
   -H "Content-Type: application/json" \
@@ -122,6 +126,7 @@ curl -X POST http://localhost:8080 \
 ### Google Cloud Functions
 
 1. Deploy using gcloud:
+
 ```bash
 gcloud functions deploy pubsub-shovel \
   --runtime go121 \
@@ -151,12 +156,14 @@ gcloud auth application-default login
 ## Logging
 
 The function provides detailed logging including:
+
 - Request validation results
 - Processing progress updates
 - Error messages
 - Completion summaries
 
 View logs in Cloud Logging:
+
 ```bash
 gcloud functions logs read pubsub-shovel
 ```
