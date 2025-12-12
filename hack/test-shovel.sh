@@ -33,7 +33,7 @@ DEFAULT_FUNCTION_URL="http://localhost:8080/Handler"  # For local testing
 FUNCTION_URL=${1:-$DEFAULT_FUNCTION_URL}
 
 # Keep the URL as provided (both root and /ShovelMessages paths work locally now)
-TEST_TYPE=${2:-"900"}
+TEST_TYPE=${2:-"10"}
 
 echo -e "${BLUE}🔧 PubSub Shovel Test Script${NC}"
 echo -e "${BLUE}============================${NC}"

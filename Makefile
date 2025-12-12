@@ -7,6 +7,13 @@ all: test build
 build:
 	go build -o bin/pubsub-shovel ./cmd
 
+# Build the fast message generator
+build-generator:
+	go build -o bin/generate-fast ./hack/generate-messages-fast.go
+
+# Build all tools
+build-all: build build-generator
+
 # Run tests
 test:
 	go test -v ./...

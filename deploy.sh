@@ -20,7 +20,7 @@ gcloud functions deploy $FUNCTION_NAME \
     --allow-unauthenticated \
     --project $PROJECT_ID \
     --memory 256MB \
-    --timeout 540s \
+    --timeout 3600s \
     --max-instances 10 \
     --region europe-west1 \
     --gen2 \
